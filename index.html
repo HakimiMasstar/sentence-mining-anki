@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Korean Mining App</title>
+    <script src="https://cdn.tailwindcss.com?v=3.4.1"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { -webkit-tap-highlight-color: transparent; }
+        .loading-spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col font-sans text-slate-900">
+
+    <header class="bg-white border-b sticky top-0 z-10 p-4 flex justify-between items-center shadow-sm">
+        <h1 class="text-xl font-black text-blue-600 tracking-tighter">K-MINER <span class="text-[10px] bg-blue-100 px-1 rounded">2.5</span></h1>
+        <button onclick="toggleSettings()" class="text-slate-400 p-2"><i class="fas fa-cog"></i></button>
+    </header>
+
+    <main class="flex-grow p-4 max-w-lg mx-auto w-full space-y-4">
+        <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+            <textarea id="sentenceInput" class="w-full p-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" rows="3" placeholder="Paste Korean sentence here..."></textarea>
+            <button id="mineBtn" onclick="mineSentence()" class="w-full mt-4 bg-blue-600 text-white font-bold py-4 rounded-2xl flex justify-center items-center shadow-lg shadow-blue-100 active:scale-95 transition">
+                <span id="btnText">Analyze & Add</span>
+                <div id="btnSpinner" class="loading-spinner ml-3 hidden"></div>
+            </button>
+        </div>
+
+        <div id="resultCard" class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hidden">
+            <div id="analysisContent" class="space-y-6"></div>
+            <div class="mt-8 flex gap-3">
+                <button id="retryAnkiBtn" onclick="addToAnki(true)" class="flex-grow bg-emerald-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-50">Retry Push to Anki</button>
+                <button onclick="clearResult()" class="px-5 bg-slate-50 rounded-2xl text-slate-300"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Settings Overlay -->
+    <div id="settingsOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-20 flex items-center justify-center p-6 hidden">
+        <div class="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl">
+            <h2 class="text-2xl font-black mb-6 text-center">Settings</h2>
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2 tracking-widest">Gemini API Key</label>
+                    <input type="password" id="apiKeyInput" class="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-inner" placeholder="Paste key here">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2 tracking-widest">Anki Deck</label>
+                    <input type="text" id="deckInput" value="Korean Mining" class="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-inner">
+                </div>
+                <button onclick="saveSettings()" class="w-full bg-slate-900 text-white font-bold py-4 rounded-xl mt-4">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold text-sm shadow-2xl transition-all opacity-0 pointer-events-none z-30 scale-90 text-center min-w-[200px]"></div>
+
+<script>
+        let currentAnalysis = null;
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        window.onload = () => {
+            document.getElementById('apiKeyInput').value = localStorage.getItem('gemini_api_key') || '';
+            document.getElementById('deckInput').value = localStorage.getItem('anki_deck') || 'Korean Mining';
+        };
+
+        function toggleSettings() { document.getElementById('settingsOverlay').classList.toggle('hidden'); }
+        function saveSettings() {
+            localStorage.setItem('gemini_api_key', document.getElementById('apiKeyInput').value);
+            localStorage.setItem('anki_deck', document.getElementById('deckInput').value);
+            showToast('Settings Saved', 'bg-slate-900'); toggleSettings();
+        }
+
+        function showToast(msg, color) {
+            const t = document.getElementById('toast'); t.innerText = msg;
+            t.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold text-sm shadow-2xl transition-all z-30 scale-100 ${color}`;
+            t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; t.classList.add('scale-90'); }, 4000);
+        }
+
+        async function mineSentence() {
+            const sentence = document.getElementById('sentenceInput').value.trim();
+            const apiKey = localStorage.getItem('gemini_api_key');
+            if (!sentence) return showToast('Error: Please enter a sentence', 'bg-rose-500');
+            if (!apiKey) { toggleSettings(); return showToast('Error: Missing API Key in Settings', 'bg-rose-500'); }
+
+            const btn = document.getElementById('mineBtn'), spinner = document.getElementById('btnSpinner'), text = document.getElementById('btnText');
+            btn.disabled = true; text.classList.add('hidden'); spinner.classList.remove('hidden');
+
+            const prompt = `Analyze Korean sentence ${JSON.stringify(sentence)} and return JSON with keys: sentence, translation, breakdown (array with word/meaning/note), grammar (array with point/explanation), slang_or_culture. Example: {"sentence":"안녕","translation":"hello","breakdown":[{"word":"안녕","meaning":"hello","note":""}],"grammar":[],"slang_or_culture":""}`;
+
+try {
+                // STEP 1: Call Gemini
+                let data;
+                try {
+const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    });
+                    const responseText = await res.text();
+                    if (!res.ok) {
+                        console.error('API Error Response:', responseText);
+                        throw new Error(`Status ${res.status}: ${responseText}`);
+                    }
+                    data = JSON.parse(responseText);
+                } catch (apiErr) {
+                    throw new Error(`Gemini API Failed: ${apiErr.message}`);
+                }
+
+                // STEP 2: Parse Response
+                console.log('API Response:', data);
+                const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!analysisText) throw new Error("Gemini returned an empty response");
+
+                try {
+                    const jsonStr = analysisText.replace(/```json|```/g, '').trim();
+                    currentAnalysis = JSON.parse(jsonStr);
+                } catch (parseErr) {
+                    throw new Error("Failed to parse Gemini analysis. Please try again.");
+                }
+
+                // STEP 3: Show Result
+                renderResult(currentAnalysis);
+                showToast('Sentence Analyzed!', 'bg-blue-600');
+
+                // STEP 4: Auto-Add to Anki
+                await addToAnki(false); // Passing false means "silently try to add, toast on failure"
+
+            } catch (err) {
+                console.error(err);
+                showToast(err.message, 'bg-rose-500');
+            } finally {
+                btn.disabled = false; text.classList.remove('hidden'); spinner.classList.add('hidden');
+            }
+        }
+
+function renderResult(d) {
+            document.getElementById('analysisContent').innerHTML = `
+                <div><div class="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1 text-center">Translation</div><div class="text-xl font-bold text-center italic">"${escapeHtml(d.translation)}"</div></div>
+                <div><div class="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4 border-b pb-1">Vocabulary</div><ul class="space-y-4">${d.breakdown.map(i => `<li><span class="text-blue-600 font-bold">${escapeHtml(i.word)}</span> <span class="text-slate-300 mx-1">→</span> ${escapeHtml(i.meaning)}</li>`).join('')}</ul></div>
+                ${d.grammar?.length ? `<div><div class="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4 border-b pb-1">Grammar</div><ul class="space-y-4">${d.grammar.map(g => `<li><span class="font-bold text-slate-700">${escapeHtml(g.point)}</span>: ${escapeHtml(g.explanation)}</li>`).join('')}</ul></div>` : ''}
+            `;
+            document.getElementById('resultCard').classList.remove('hidden');
+            document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function addToAnki(isManualRetry) {
+            if (!currentAnalysis) return;
+            const deck = localStorage.getItem('anki_deck') || 'Korean Mining';
+            const retryBtn = document.getElementById('retryAnkiBtn');
+            
+// Card HTML
+            const front = `<div style='font-size: 28px; color: #1e40af; font-weight: 900; text-align: center;'>${escapeHtml(currentAnalysis.sentence)}</div>`;
+            let back = `<div style='font-family: sans-serif; color: #1e293b;'><p style='font-size: 18px; color: #000; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;'><strong>Translation:</strong> ${escapeHtml(currentAnalysis.translation)}</p><h4 style='color: #3b82f6; margin-top: 15px; margin-bottom: 5px;'>Vocab</h4><ul>`;
+            currentAnalysis.breakdown.forEach(i => back += `<li><strong>${escapeHtml(i.word)}</strong>: ${escapeHtml(i.meaning)}${i.note ? ` (${escapeHtml(i.note)})` : ''}</li>`);
+            back += `</ul>`;
+if (currentAnalysis.grammar?.length) {
+                back += `<h4 style='color: #3b82f6; margin-top: 15px; margin-bottom: 5px;'>Grammar</h4><ul>`;
+                currentAnalysis.grammar.forEach(g => back += `<li><strong>${escapeHtml(g.point)}</strong>: ${escapeHtml(g.explanation)}</li>`);
+                back += `</ul>`;
+            }
+            if (currentAnalysis.slang_or_culture) back += `<h4 style='color: #3b82f6; margin-top: 15px; margin-bottom: 5px;'>Notes</h4><p>${escapeHtml(currentAnalysis.slang_or_culture)}</p>`;
+            back += `</div>`;
+
+            try {
+                // Ensure AnkiConnect is reachable
+                try {
+                    await fetch('http://127.0.0.1:8765', { method: 'POST', body: JSON.stringify({ action: "version", version: 6 }) });
+                } catch (e) {
+                    throw new Error("AnkiConnect Android is not running on your phone.");
+                }
+
+                // Create Deck
+                await fetch('http://127.0.0.1:8765', { method: 'POST', body: JSON.stringify({ action: "createDeck", version: 6, params: { deck: deck } }) });
+
+                // Add Note
+                const res = await fetch('http://127.0.0.1:8765', { 
+                    method: 'POST', 
+                    body: JSON.stringify({ 
+                        action: "addNote", version: 6, 
+                        params: { note: { deckName: deck, modelName: "Basic", fields: { Front: front, Back: back }, tags: ["korean_mining"] } } 
+                    }) 
+                });
+
+                const r = await res.json();
+                if (r.error) throw new Error(`Anki Error: ${r.error}`);
+                
+                showToast('Success! Sentence Mined & Added.', 'bg-green-600');
+                if (!isManualRetry) clearResult(); // Clean up if it worked automatically
+
+            } catch (err) {
+                console.error(err);
+                showToast(`Anki Fail: ${err.message}`, 'bg-rose-500');
+                // Don't clear result if Anki failed, so user can retry
+            }
+        }
+
+        function clearResult() { 
+            document.getElementById('resultCard').classList.add('hidden'); 
+            document.getElementById('sentenceInput').value = ''; 
+            currentAnalysis = null;
+        }
+    </script>
+</body>
+</html>
