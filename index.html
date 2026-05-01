@@ -183,68 +183,8 @@ async function addToAnki(isManualRetry) {
                 showToast('Could not add to Anki', 'bg-rose-500');
             }
         }
-            if (currentAnalysis.slang_or_culture) back += `\nNotes: ${currentAnalysis.slang_or_culture}`;
 
-            // Try AnkiConnect first (localhost)
-            try {
-                await fetch('http://127.0.0.1:8765', { method: 'POST', body: JSON.stringify({ action: "version", version: 6 }) });
-                
-                await fetch('http://127.0.0.1:8765', { method: 'POST', body: JSON.stringify({ action: "createDeck", version: 6, params: { deck: deck } }) });
-                
-                const res = await fetch('http://127.0.0.1:8765', { 
-                    method: 'POST', 
-                    body: JSON.stringify({ 
-                        action: "addNote", version: 6, 
-                        params: { note: { deckName: deck, modelName: "Basic", fields: { Front: front, Back: back }, tags: ["korean_mining"] } } 
-                    }) 
-                });
-                const r = await res.json();
-                if (r.error) throw new Error(r.error);
-                
-                showToast('Success! Added to Anki', 'bg-green-600');
-                if (!isManualRetry) clearResult();
-                return;
-            } catch (e) {
-                console.log('AnkiConnect not available:', e.message);
-            }
-
-            // Check if inside AnkiDroid WebView
-            const ua = navigator.userAgent || '';
-            if (ua.includes('AnkiDroid')) {
-                try {
-                    window.ankiAddNote?.(front, back);
-                    showToast('Success! Added to AnkiDroid', 'bg-green-600');
-                    if (!isManualRetry) clearResult();
-                    return;
-                } catch (e) {
-                    console.log('AnkiDroid JS API failed:', e.message);
-                }
-            }
-
-            // Direct to AnkiDroid via intent (works in browser)
-            const encodedFront = encodeURIComponent(front);
-            const encodedBack = encodeURIComponent(back);
-            const intentUrl = `intent://addnote?front=${encodedFront}&back=${encodedBack}#Intent;scheme=ankidroid;package=com.ichi2.anki;end`;
-            
-            try {
-                window.location.href = intentUrl;
-                showToast('Opening AnkiDroid...', 'bg-blue-600');
-                if (!isManualRetry) setTimeout(clearResult, 1500);
-                return;
-            } catch (e) {
-                console.log('Intent failed:', e.message);
-            }
-
-            // Fallback: Copy to clipboard
-            try {
-                await navigator.clipboard.writeText(`${front}\n\n${back}`);
-                showToast('Copied! Open AnkiDroid and add manually', 'bg-blue-600');
-            } catch (e) {
-                showToast('Could not add to Anki', 'bg-rose-500');
-            }
-        }
-
-        function clearResult() { 
+        function clearResult() {
             document.getElementById('resultCard').classList.add('hidden'); 
             document.getElementById('sentenceInput').value = ''; 
             currentAnalysis = null;
