@@ -61,7 +61,7 @@
         </div>
     </div>
 
-    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold text-sm shadow-2xl transition-all opacity-0 pointer-events-none z-30 scale-90 text-center min-w-[200px]"></div>
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold text-sm shadow-2xl transition-all opacity-0 z-30 scale-90 text-center min-w-[200px] pointer-events-none"></div>
 
 <script>
         let currentAnalysis = null;
@@ -92,8 +92,14 @@ window.onload = () => {
 
         function showToast(msg, color) {
             const t = document.getElementById('toast'); t.innerText = msg;
-            t.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold text-sm shadow-2xl transition-all z-30 scale-100 ${color}`;
-            t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; t.classList.add('scale-90'); }, 4000);
+            t.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold text-sm shadow-2xl transition-all z-30 scale-100 pointer-events-none ${color}`;
+            t.style.opacity = '1'; 
+            t.classList.remove('pointer-events-none');
+            setTimeout(() => { 
+                t.style.opacity = '0'; 
+                t.classList.add('scale-90');
+            }, 1500);
+            setTimeout(() => t.classList.add('pointer-events-none'), 1800);
         }
 
 function validateAnalysis(data) {
