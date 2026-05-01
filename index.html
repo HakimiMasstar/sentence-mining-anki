@@ -189,6 +189,7 @@ function renderResult(d) {
 async function addToAnki() {
             if (!currentAnalysis) return;
             
+            const front = currentAnalysis.sentence;
             let back = `<b>${currentAnalysis.translation}</b>\n\n`;
             back += `<b>Vocabulary</b>\n`;
             currentAnalysis.breakdown.forEach(i => back += `• ${i.word} — ${i.meaning}\n`);
@@ -207,8 +208,8 @@ async function addToAnki() {
 
             try {
                 await navigator.share({
-                    title: currentAnalysis.sentence,
-                    text: `${currentAnalysis.sentence}\n\n${back}`
+                    title: front,
+                    text: `${back}`
                 });
                 showToast('Opening AnkiDroid...', 'bg-blue-600');
             } catch (e) {
