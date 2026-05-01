@@ -31,7 +31,7 @@
         <div id="resultCard" class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hidden">
             <div id="analysisContent" class="space-y-6"></div>
             <div class="mt-8 flex gap-3">
-                <button id="retryAnkiBtn" onclick="addToAnki(true)" class="flex-grow bg-emerald-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-50">Retry Push to Anki</button>
+                <button id="retryAnkiBtn" onclick="addToAnki(true)" class="flex-grow bg-emerald-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-50">Add to Anki</button>
                 <button onclick="clearResult()" class="px-5 bg-slate-50 rounded-2xl text-slate-300"><i class="fas fa-trash"></i></button>
             </div>
         </div>
@@ -149,36 +149,27 @@ function renderResult(d) {
             document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
         }
 
-        async function addToAnki(isManualRetry) {
+async function addToAnki(isManualRetry) {
             if (!currentAnalysis) return;
             const deck = localStorage.getItem('anki_deck') || 'Korean Mining';
-            const retryBtn = document.getElementById('retryAnkiBtn');
             
-// Card HTML
-            const front = `<div style='font-size: 28px; color: #1e40af; font-weight: 900; text-align: center;'>${escapeHtml(currentAnalysis.sentence)}</div>`;
-            let back = `<div style='font-family: sans-serif; color: #1e293b;'><p style='font-size: 18px; color: #000; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;'><strong>Translation:</strong> ${escapeHtml(currentAnalysis.translation)}</p><h4 style='color: #3b82f6; margin-top: 15px; margin-bottom: 5px;'>Vocab</h4><ul>`;
-            currentAnalysis.breakdown.forEach(i => back += `<li><strong>${escapeHtml(i.word)}</strong>: ${escapeHtml(i.meaning)}${i.note ? ` (${escapeHtml(i.note)})` : ''}</li>`);
-            back += `</ul>`;
-if (currentAnalysis.grammar?.length) {
-                back += `<h4 style='color: #3b82f6; margin-top: 15px; margin-bottom: 5px;'>Grammar</h4><ul>`;
-                currentAnalysis.grammar.forEach(g => back += `<li><strong>${escapeHtml(g.point)}</strong>: ${escapeHtml(g.explanation)}</li>`);
-                back += `</ul>`;
+            const front = escapeHtml(currentAnalysis.sentence);
+            let back = `<strong>${escapeHtml(currentAnalysis.translation)}</strong>\n\n`;
+            currentAnalysis.breakdown.forEach(i => back += `• ${escapeHtml(i.word)}: ${escapeHtml(i.meaning)}\n`);
+            if (currentAnalysis.grammar?.length) {
+                back += `\n📚 Grammar:\n`;
+                currentAnalysis.grammar.forEach(g => back += `• ${escapeHtml(g.point)}: ${escapeHtml(g.explanation)}\n`);
             }
-            if (currentAnalysis.slang_or_culture) back += `<h4 style='color: #3b82f6; margin-top: 15px; margin-bottom: 5px;'>Notes</h4><p>${escapeHtml(currentAnalysis.slang_or_culture)}</p>`;
-            back += `</div>`;
+            if (currentAnalysis.slang_or_culture) back += `\n📝 ${escapeHtml(currentAnalysis.slang_or_culture)}`;
 
+            const text = `${front}\n\n---\n\n${back}`;
+
+            // Try AnkiConnect first (localhost)
             try {
-                // Ensure AnkiConnect is reachable
-                try {
-                    await fetch('http://127.0.0.1:8765', { method: 'POST', body: JSON.stringify({ action: "version", version: 6 }) });
-                } catch (e) {
-                    throw new Error("AnkiConnect Android is not running on your phone.");
-                }
-
-                // Create Deck
+                await fetch('http://127.0.0.1:8765', { method: 'POST', body: JSON.stringify({ action: "version", version: 6 }) });
+                
                 await fetch('http://127.0.0.1:8765', { method: 'POST', body: JSON.stringify({ action: "createDeck", version: 6, params: { deck: deck } }) });
-
-                // Add Note
+                
                 const res = await fetch('http://127.0.0.1:8765', { 
                     method: 'POST', 
                     body: JSON.stringify({ 
@@ -186,17 +177,47 @@ if (currentAnalysis.grammar?.length) {
                         params: { note: { deckName: deck, modelName: "Basic", fields: { Front: front, Back: back }, tags: ["korean_mining"] } } 
                     }) 
                 });
-
                 const r = await res.json();
-                if (r.error) throw new Error(`Anki Error: ${r.error}`);
+                if (r.error) throw new Error(r.error);
                 
-                showToast('Success! Sentence Mined & Added.', 'bg-green-600');
-                if (!isManualRetry) clearResult(); // Clean up if it worked automatically
+                showToast('Success! Added to Anki', 'bg-green-600');
+                if (!isManualRetry) clearResult();
+                return;
+            } catch (e) {
+                console.log('AnkiConnect not available:', e.message);
+            }
 
-            } catch (err) {
-                console.error(err);
-                showToast(`Anki Fail: ${err.message}`, 'bg-rose-500');
-                // Don't clear result if Anki failed, so user can retry
+            // Check if inside AnkiDroid WebView
+            const ua = navigator.userAgent || '';
+            if (ua.includes('AnkiDroid')) {
+                try {
+                    window.ankiAddNote?.(front, back);
+                    showToast('Success! Added to AnkiDroid', 'bg-green-600');
+                    if (!isManualRetry) clearResult();
+                    return;
+                } catch (e) {
+                    console.log('AnkiDroid JS API failed:', e.message);
+                }
+            }
+
+            // Fallback: Use Android Share Intent
+            try {
+                if (navigator.share) {
+                    await navigator.share({ title: 'Add to Anki', text: text });
+                    showToast('Shared to AnkiDroid!', 'bg-green-600');
+                    if (!isManualRetry) clearResult();
+                    return;
+                }
+            } catch (e) {
+                if (e.name !== 'AbortError') console.error(e);
+            }
+
+            // Last resort: Copy to clipboard
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('Copied! Open AnkiDroid → Add → Paste', 'bg-blue-600');
+            } catch (e) {
+                showToast('Could not add to Anki. Copy manually.', 'bg-rose-500');
             }
         }
 
