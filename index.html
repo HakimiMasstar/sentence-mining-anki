@@ -192,42 +192,29 @@ async function addToAnki() {
                 currentAnalysis.grammar.forEach(g => back += `${g.point} - ${g.explanation}; `);
             }
             if (currentAnalysis.slang_or_culture) back += `\nNotes: ${currentAnalysis.slang_or_culture}`;
-            
-            const deck = localStorage.getItem('anki_deck') || 'Korean Mining';
-            const intentUrl = `intent://add?front=${encodeURIComponent(front)}&back=${encodeURIComponent(back)}&deck=${encodeURIComponent(deck)}#Intent;scheme=ankidroid;package=com.ichi2.anki;end`;
 
-            if (navigator.userAgent.includes('Android')) {
-                try {
-                    window.location.href = intentUrl;
-                    setTimeout(() => {
-                        showToast('Sent to AnkiDroid!', 'bg-green-600');
-                        clearResult();
-                    }, 500);
-                    return;
-                } catch (e) {
-                    showToast('Failed to open AnkiDroid', 'bg-rose-500');
-                    return;
-                }
+            if (!navigator.share) {
+                showToast('Web Share not supported. Use AnkiDroid share feature.', 'bg-rose-500');
+                return;
             }
 
-            if (navigator.share) {
-                try {
-                    await navigator.share({
-                        title: `${front} (${deck})`,
-                        text: `${front}\n\n${back}\n\n[Deck: ${deck}]`
-                    });
-                    showToast('Sent to AnkiDroid!', 'bg-green-600');
-                    clearResult();
-                    return;
-                } catch (e) {
-                    if (e.name !== 'AbortError') {
-                        showToast('Share cancelled or failed', 'bg-rose-500');
-                    }
-                    return;
+            try {
+                await navigator.share({
+                    title: front,
+                    text: `${front}\n\n${back}`
+                });
+                showToast('Opening AnkiDroid...', 'bg-blue-600');
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    showToast('Share cancelled', 'bg-rose-500');
                 }
+                return;
             }
 
-            showToast('Web Share not supported on this device', 'bg-rose-500');
+            setTimeout(() => {
+                clearResult();
+                showToast('Card added!', 'bg-green-600');
+            }, 1500);
         }
 
         function clearResult() {
