@@ -47,9 +47,9 @@
                     <input type="password" id="apiKeyInput" class="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-inner" placeholder="Paste key here">
                     <p class="text-[10px] text-slate-300 mt-2">🔒 Stored locally in your browser. Clear browser data to reset.</p>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2 tracking-widest">Anki Deck</label>
-                    <input type="text" id="deckInput" value="Korean Mining" class="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-inner">
+<div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2 tracking-widest">Gemini Model</label>
+                    <input type="text" id="modelInput" value="gemini-3-flash-preview" class="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-inner" placeholder="gemini-3-flash-preview">
                 </div>
                 <button onclick="saveSettings()" class="w-full bg-slate-900 text-white font-bold py-4 rounded-xl mt-4">Save Configuration</button>
             </div>
@@ -73,15 +73,15 @@ function extractJsonFromText(text) {
             if (!str) return '';
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
-        window.onload = () => {
+window.onload = () => {
             document.getElementById('apiKeyInput').value = localStorage.getItem('gemini_api_key') || '';
-            document.getElementById('deckInput').value = localStorage.getItem('anki_deck') || 'Korean Mining';
+            document.getElementById('modelInput').value = localStorage.getItem('gemini_model') || 'gemini-3-flash-preview';
         };
 
         function toggleSettings() { document.getElementById('settingsOverlay').classList.toggle('hidden'); }
         function saveSettings() {
             localStorage.setItem('gemini_api_key', document.getElementById('apiKeyInput').value);
-            localStorage.setItem('anki_deck', document.getElementById('deckInput').value);
+            localStorage.setItem('gemini_model', document.getElementById('modelInput').value);
             showToast('Settings Saved', 'bg-slate-900'); toggleSettings();
         }
 
@@ -120,8 +120,9 @@ function validateAnalysis(data) {
 
 try {
                 let data;
+                const model = localStorage.getItem('gemini_model') || 'gemini-3-flash-preview';
                 try {
-const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent`, {
+const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
@@ -185,13 +186,16 @@ async function addToAnki() {
             if (!currentAnalysis) return;
             
             const front = currentAnalysis.sentence;
-            let back = `${currentAnalysis.translation}\n\n`;
-            currentAnalysis.breakdown.forEach(i => back += `${i.word}: ${i.meaning}\n`);
+            let back = `<b>${currentAnalysis.translation}</b>\n\n`;
+            back += `<b>Vocabulary</b>\n`;
+            currentAnalysis.breakdown.forEach(i => back += `• ${i.word} — ${i.meaning}\n`);
             if (currentAnalysis.grammar?.length) {
-                back += `\nGrammar: `;
-                currentAnalysis.grammar.forEach(g => back += `${g.point} - ${g.explanation}; `);
+                back += `\n<b>Grammar</b>\n`;
+                currentAnalysis.grammar.forEach(g => back += `• ${g.point}: ${g.explanation}\n`);
             }
-            if (currentAnalysis.slang_or_culture) back += `\nNotes: ${currentAnalysis.slang_or_culture}`;
+            if (currentAnalysis.slang_or_culture) {
+                back += `\n<b>Notes</b>\n${currentAnalysis.slang_or_culture}`;
+            }
 
             if (!navigator.share) {
                 showToast('Web Share not supported. Use AnkiDroid share feature.', 'bg-rose-500');
