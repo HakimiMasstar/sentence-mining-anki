@@ -161,24 +161,25 @@ async function addToAnki(isManualRetry) {
             }
             if (currentAnalysis.slang_or_culture) back += `\nNotes: ${currentAnalysis.slang_or_culture}`;
 
-            // Direct to AnkiDroid via intent (works in browser)
-            const encodedFront = encodeURIComponent(front);
-            const encodedBack = encodeURIComponent(back);
-            const intentUrl = `intent://addnote?front=${encodedFront}&back=${encodedBack}#Intent;scheme=ankidroid;package=com.ichi2.anki;end`;
-            
+            // Try Web Share API (opens Android share sheet)
             try {
-                window.location.href = intentUrl;
-                showToast('Opening AnkiDroid...', 'bg-blue-600');
-                if (!isManualRetry) setTimeout(clearResult, 1500);
-                return;
+                if (navigator.share) {
+                    await navigator.share({
+                        title: front,
+                        text: `${front}\n\n${back}`
+                    });
+                    showToast('Sent to AnkiDroid!', 'bg-green-600');
+                    if (!isManualRetry) clearResult();
+                    return;
+                }
             } catch (e) {
-                console.log('Intent failed:', e.message);
+                if (e.name !== 'AbortError') console.log('Share failed:', e.message);
             }
 
             // Fallback: Copy to clipboard
             try {
                 await navigator.clipboard.writeText(`${front}\n\n${back}`);
-                showToast('Copied! Open AnkiDroid and add manually', 'bg-blue-600');
+                showToast('Copied! Open AnkiDroid → + → Paste', 'bg-blue-600');
             } catch (e) {
                 showToast('Could not add to Anki', 'bg-rose-500');
             }
