@@ -23,7 +23,7 @@
         <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
             <textarea id="sentenceInput" class="w-full p-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" rows="3" placeholder="Paste Korean sentence here..."></textarea>
             <button id="mineBtn" onclick="mineSentence()" class="w-full mt-4 bg-blue-600 text-white font-bold py-4 rounded-2xl flex justify-center items-center shadow-lg shadow-blue-100 active:scale-95 transition">
-                <span id="btnText">Analyze & Add</span>
+                <span id="btnText">Analyze</span>
                 <div id="btnSpinner" class="loading-spinner ml-3 hidden"></div>
             </button>
         </div>
@@ -31,7 +31,7 @@
         <div id="resultCard" class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hidden">
             <div id="analysisContent" class="space-y-6"></div>
             <div class="mt-8 flex gap-3">
-                <button id="retryAnkiBtn" onclick="addToAnki(true)" class="flex-grow bg-emerald-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-50">Add to Anki</button>
+                <button id="retryAnkiBtn" onclick="addToAnki()" class="flex-grow bg-emerald-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-50">Add to Anki</button>
                 <button onclick="clearResult()" class="px-5 bg-slate-50 rounded-2xl text-slate-300"><i class="fas fa-trash"></i></button>
             </div>
         </div>
@@ -42,9 +42,10 @@
         <div class="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl">
             <h2 class="text-2xl font-black mb-6 text-center">Settings</h2>
             <div class="space-y-5">
-                <div>
+<div>
                     <label class="block text-xs font-bold text-slate-400 uppercase mb-2 tracking-widest">Gemini API Key</label>
                     <input type="password" id="apiKeyInput" class="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 shadow-inner" placeholder="Paste key here">
+                    <p class="text-[10px] text-slate-300 mt-2">🔒 Stored locally in your browser. Clear browser data to reset.</p>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-400 uppercase mb-2 tracking-widest">Anki Deck</label>
@@ -59,6 +60,14 @@
 
 <script>
         let currentAnalysis = null;
+
+function extractJsonFromText(text) {
+            try {
+                const match = text.match(/\{[\s\S]*\}/);
+                if (match) return JSON.parse(match[0]);
+            } catch (e) {}
+            return null;
+        }
 
         function escapeHtml(str) {
             if (!str) return '';
@@ -82,6 +91,22 @@
             t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; t.classList.add('scale-90'); }, 4000);
         }
 
+function validateAnalysis(data) {
+            if (!data) return { valid: false, error: 'Empty response from API' };
+            if (typeof data.sentence !== 'string') return { valid: false, error: 'Invalid response: missing sentence' };
+            if (typeof data.translation !== 'string') return { valid: false, error: 'Invalid response: missing translation' };
+            if (!Array.isArray(data.breakdown)) return { valid: false, error: 'Invalid response: breakdown must be an array' };
+            for (const item of data.breakdown) {
+                if (typeof item.word !== 'string' || typeof item.meaning !== 'string') {
+                    return { valid: false, error: 'Invalid response: breakdown items must have word and meaning' };
+                }
+            }
+            if (data.grammar !== undefined && !Array.isArray(data.grammar)) {
+                return { valid: false, error: 'Invalid response: grammar must be an array' };
+            }
+            return { valid: true };
+        }
+
         async function mineSentence() {
             const sentence = document.getElementById('sentenceInput').value.trim();
             const apiKey = localStorage.getItem('gemini_api_key');
@@ -94,7 +119,6 @@
             const prompt = `Analyze Korean sentence ${JSON.stringify(sentence)} and return JSON with keys: sentence, translation, breakdown (array with word/meaning/note), grammar (array with point/explanation), slang_or_culture. Example: {"sentence":"안녕","translation":"hello","breakdown":[{"word":"안녕","meaning":"hello","note":""}],"grammar":[],"slang_or_culture":""}`;
 
 try {
-                // STEP 1: Call Gemini
                 let data;
                 try {
 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent`, {
@@ -112,7 +136,6 @@ const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models
                     throw new Error(`Gemini API Failed: ${apiErr.message}`);
                 }
 
-                // STEP 2: Parse Response
                 console.log('API Response:', data);
                 const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (!analysisText) throw new Error("Gemini returned an empty response");
@@ -121,15 +144,24 @@ const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models
                     const jsonStr = analysisText.replace(/```json|```/g, '').trim();
                     currentAnalysis = JSON.parse(jsonStr);
                 } catch (parseErr) {
-                    throw new Error("Failed to parse Gemini analysis. Please try again.");
+                    throw new Error("Failed to parse Gemini response. Trying to extract JSON manually...");
                 }
 
-                // STEP 3: Show Result
+                const validation = validateAnalysis(currentAnalysis);
+                if (!validation.valid) {
+                    const fallback = extractJsonFromText(analysisText);
+                    if (fallback) {
+                        currentAnalysis = fallback;
+                        const revalidate = validateAnalysis(currentAnalysis);
+                        if (!revalidate.valid) throw new Error(revalidate.error);
+                    } else {
+                        throw new Error(validation.error);
+                    }
+                }
+
+// STEP 3: Show Result
                 renderResult(currentAnalysis);
                 showToast('Sentence Analyzed!', 'bg-blue-600');
-
-                // STEP 4: Auto-Add to Anki
-                await addToAnki(false); // Passing false means "silently try to add, toast on failure"
 
             } catch (err) {
                 console.error(err);
@@ -149,7 +181,7 @@ function renderResult(d) {
             document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
         }
 
-async function addToAnki(isManualRetry) {
+async function addToAnki() {
             if (!currentAnalysis) return;
             
             const front = currentAnalysis.sentence;
@@ -160,29 +192,42 @@ async function addToAnki(isManualRetry) {
                 currentAnalysis.grammar.forEach(g => back += `${g.point} - ${g.explanation}; `);
             }
             if (currentAnalysis.slang_or_culture) back += `\nNotes: ${currentAnalysis.slang_or_culture}`;
+            
+            const deck = localStorage.getItem('anki_deck') || 'Korean Mining';
+            const intentUrl = `intent://add?front=${encodeURIComponent(front)}&back=${encodeURIComponent(back)}&deck=${encodeURIComponent(deck)}#Intent;scheme=ankidroid;package=com.ichi2.anki;end`;
 
-            // Try Web Share API (opens Android share sheet)
-            try {
-                if (navigator.share) {
-                    await navigator.share({
-                        title: front,
-                        text: `${front}\n\n${back}`
-                    });
-                    showToast('Sent to AnkiDroid!', 'bg-green-600');
-                    if (!isManualRetry) clearResult();
+            if (navigator.userAgent.includes('Android')) {
+                try {
+                    window.location.href = intentUrl;
+                    setTimeout(() => {
+                        showToast('Sent to AnkiDroid!', 'bg-green-600');
+                        clearResult();
+                    }, 500);
+                    return;
+                } catch (e) {
+                    showToast('Failed to open AnkiDroid', 'bg-rose-500');
                     return;
                 }
-            } catch (e) {
-                if (e.name !== 'AbortError') console.log('Share failed:', e.message);
             }
 
-            // Fallback: Copy to clipboard
-            try {
-                await navigator.clipboard.writeText(`${front}\n\n${back}`);
-                showToast('Copied! Open AnkiDroid → + → Paste', 'bg-blue-600');
-            } catch (e) {
-                showToast('Could not add to Anki', 'bg-rose-500');
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: `${front} (${deck})`,
+                        text: `${front}\n\n${back}\n\n[Deck: ${deck}]`
+                    });
+                    showToast('Sent to AnkiDroid!', 'bg-green-600');
+                    clearResult();
+                    return;
+                } catch (e) {
+                    if (e.name !== 'AbortError') {
+                        showToast('Share cancelled or failed', 'bg-rose-500');
+                    }
+                    return;
+                }
             }
+
+            showToast('Web Share not supported on this device', 'bg-rose-500');
         }
 
         function clearResult() {
