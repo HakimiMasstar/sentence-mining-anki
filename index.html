@@ -151,18 +151,39 @@ function renderResult(d) {
 
 async function addToAnki(isManualRetry) {
             if (!currentAnalysis) return;
-            const deck = localStorage.getItem('anki_deck') || 'Korean Mining';
             
-            const front = escapeHtml(currentAnalysis.sentence);
-            let back = `<strong>${escapeHtml(currentAnalysis.translation)}</strong>\n\n`;
-            currentAnalysis.breakdown.forEach(i => back += `• ${escapeHtml(i.word)}: ${escapeHtml(i.meaning)}\n`);
+            const front = currentAnalysis.sentence;
+            let back = `${currentAnalysis.translation}\n\n`;
+            currentAnalysis.breakdown.forEach(i => back += `${i.word}: ${i.meaning}\n`);
             if (currentAnalysis.grammar?.length) {
-                back += `\n📚 Grammar:\n`;
-                currentAnalysis.grammar.forEach(g => back += `• ${escapeHtml(g.point)}: ${escapeHtml(g.explanation)}\n`);
+                back += `\nGrammar: `;
+                currentAnalysis.grammar.forEach(g => back += `${g.point} - ${g.explanation}; `);
             }
-            if (currentAnalysis.slang_or_culture) back += `\n📝 ${escapeHtml(currentAnalysis.slang_or_culture)}`;
+            if (currentAnalysis.slang_or_culture) back += `\nNotes: ${currentAnalysis.slang_or_culture}`;
 
-            const text = `${front}\n\n---\n\n${back}`;
+            // Direct to AnkiDroid via intent (works in browser)
+            const encodedFront = encodeURIComponent(front);
+            const encodedBack = encodeURIComponent(back);
+            const intentUrl = `intent://addnote?front=${encodedFront}&back=${encodedBack}#Intent;scheme=ankidroid;package=com.ichi2.anki;end`;
+            
+            try {
+                window.location.href = intentUrl;
+                showToast('Opening AnkiDroid...', 'bg-blue-600');
+                if (!isManualRetry) setTimeout(clearResult, 1500);
+                return;
+            } catch (e) {
+                console.log('Intent failed:', e.message);
+            }
+
+            // Fallback: Copy to clipboard
+            try {
+                await navigator.clipboard.writeText(`${front}\n\n${back}`);
+                showToast('Copied! Open AnkiDroid and add manually', 'bg-blue-600');
+            } catch (e) {
+                showToast('Could not add to Anki', 'bg-rose-500');
+            }
+        }
+            if (currentAnalysis.slang_or_culture) back += `\nNotes: ${currentAnalysis.slang_or_culture}`;
 
             // Try AnkiConnect first (localhost)
             try {
@@ -200,24 +221,26 @@ async function addToAnki(isManualRetry) {
                 }
             }
 
-            // Fallback: Use Android Share Intent
+            // Direct to AnkiDroid via intent (works in browser)
+            const encodedFront = encodeURIComponent(front);
+            const encodedBack = encodeURIComponent(back);
+            const intentUrl = `intent://addnote?front=${encodedFront}&back=${encodedBack}#Intent;scheme=ankidroid;package=com.ichi2.anki;end`;
+            
             try {
-                if (navigator.share) {
-                    await navigator.share({ title: 'Add to Anki', text: text });
-                    showToast('Shared to AnkiDroid!', 'bg-green-600');
-                    if (!isManualRetry) clearResult();
-                    return;
-                }
+                window.location.href = intentUrl;
+                showToast('Opening AnkiDroid...', 'bg-blue-600');
+                if (!isManualRetry) setTimeout(clearResult, 1500);
+                return;
             } catch (e) {
-                if (e.name !== 'AbortError') console.error(e);
+                console.log('Intent failed:', e.message);
             }
 
-            // Last resort: Copy to clipboard
+            // Fallback: Copy to clipboard
             try {
-                await navigator.clipboard.writeText(text);
-                showToast('Copied! Open AnkiDroid → Add → Paste', 'bg-blue-600');
+                await navigator.clipboard.writeText(`${front}\n\n${back}`);
+                showToast('Copied! Open AnkiDroid and add manually', 'bg-blue-600');
             } catch (e) {
-                showToast('Could not add to Anki. Copy manually.', 'bg-rose-500');
+                showToast('Could not add to Anki', 'bg-rose-500');
             }
         }
 
