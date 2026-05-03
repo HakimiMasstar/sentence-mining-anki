@@ -127,7 +127,7 @@ function validateAnalysis(data) {
             const btn = document.getElementById('mineBtn'), spinner = document.getElementById('btnSpinner'), text = document.getElementById('btnText');
             btn.disabled = true; text.classList.add('hidden'); spinner.classList.remove('hidden');
 
-            const prompt = `Analyze Korean sentence ${JSON.stringify(sentence)} and return JSON with keys: sentence, translation, breakdown (array with word/meaning/note), grammar (array with point/explanation), slang_or_culture. Example: {"sentence":"안녕","translation":"hello","breakdown":[{"word":"안녕","meaning":"hello","note":""}],"grammar":[],"slang_or_culture":""}`;
+            const prompt = `Analyze Korean sentence ${JSON.stringify(sentence)} and return JSON with keys: sentence, translation, breakdown (array with word/root/conjugation/meaning), grammar (array with point/explanation), slang_or_culture. For each word in breakdown: word is the conjugated form as it appears in the sentence, root is the dictionary/lemma form, conjugation explains the verb/adjective conjugation ending and tense, meaning is the English definition. Example: {"sentence":"안녕","translation":"hello","breakdown":[{"word":"했어","root":"하다","conjugation":"past tense -았/했- ending","meaning":"to do"}],"grammar":[],"slang_or_culture":""}`;
 
 try {
                 let data;
